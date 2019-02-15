@@ -1,0 +1,136 @@
+---
+title: "Practical ML Project"
+author: "Amal"
+date: "February 15, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Objective
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+## 2. Data Loading and Processing
+
+#### 2.1. Loading necessary R Libraries
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(RColorBrewer)
+library(rattle)
+```
+
+#### 2.2. Downloading and Reading Data
+```{r, cache = T}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./data/pml-training.csv"
+testFile  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile)
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile)
+}
+
+trainData <- read.csv(trainFile, header=TRUE)
+testData <- read.csv(testFile, header=TRUE)
+str(trainData)
+str(testData)
+
+```
+
+#### 2.3. Data Pre-processing
+
+The training data set consists of 19,622 observations on 160 columns, while the testing data set contains 20 observations and 160 variables. The "classe" variable in the training set is the outcome to predict. 
+
+We can observe that many columns in the data have NA/blank values on almost every observation. So we will remove observations having greater than 90% NA/blank, because they will not produce any information. Also, the first seven columns give and attributes which will be irrelevant to the model. So, we remove it from training and test data.
+
+```{r, cache = T}
+colToRemove <- which(colSums(is.na(trainData)|trainData=="")>0.9*dim(trainData)[1]) 
+trainDataClean <- trainData[,-colToRemove]
+trainDataClean <- trainDataClean[,-c(1:7)]
+dim(trainDataClean)
+testDataClean <- testData[,-colToRemove]
+testDataClean <- testDataClean[,-c(1:7)]
+dim(testDataClean)
+```
+After data pre-processing, the new data set has reduced to 53 columns.
+
+## 3. Data Modelling
+
+
+#### 3.1. Creating training and validation data set
+
+Using 70% and 30% split
+
+```{r, cache = T}
+set.seed(007) 
+spltData <- createDataPartition(trainDataClean$classe, p = 0.7, list = FALSE)
+trainDataFinal <- trainDataClean[spltData, ]
+valDataFinal <- trainDataClean[-spltData, ]
+dim(trainDataFinal)
+dim(valDataFinal)
+```
+
+We are trying Classification Tree and Random Forest method
+
+We are using k-fold cross validation technique with K as 5
+
+#### 3.2. Using Classification Tree
+
+```{r, cache = T}
+controlCT <- trainControl(method="cv", 5)
+modelCT <- train(classe~., data=trainDataFinal, method="rpart", trControl=controlCT)
+fancyRpartPlot(modelCT$finalModel)
+```
+
+Checking performance with Validation Data Set
+```{r, cache = T}
+predictCT <- predict(modelCT,newdata=valDataFinal)
+confMatCT <- confusionMatrix(predictCT, valDataFinal$classe)
+confMatCT
+```
+We can see that the accuracy rate of the model is low (0.4974) and not a good model
+
+#### 3.3. Using Random Forest
+
+```{r, cache = T}
+controlRF <- trainControl(method="cv", 5)
+modelRF <- train(classe ~ ., data=trainDataFinal, method="rf", trControl=controlRF, ntree=250, verbose=FALSE)
+modelRF$finalModel
+```
+
+Checking performance with Validation Data Set
+```{r, cache = T}
+predictRF <- predict(modelRF, newdata=valDataFinal)
+confMatRF <- confusionMatrix(predictRF, valDataFinal$classe)
+confMatRF
+
+accuracy <- postResample(predictRF, valDataFinal$classe)
+accuracy
+
+```
+
+The accuracy rate using the random forest is very high (Accuracy: 0.9923 )
+
+## 4. Result
+
+The analysis shows that the random forest model is the best model We will then use it to predict the values for the test data set.
+
+```{r, cache = T}
+FinalFinal <- predict(modelRF,newdata=testDataClean)
+FinalFinal
+```
